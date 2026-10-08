@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Feliz aniversário, Vick 💜</title>
+  <meta name="description" content="Um álbum lacrado, perdido no espaço, feito só pra você.">
+  <meta name="theme-color" content="#0b0618">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Feliz aniversário, Vick 💜">
+  <meta property="og:description" content="Um álbum lacrado, perdido no espaço, feito só pra você. Rompa o lacre ✨">
+  <meta property="og:image" content="https://cxildiner.github.io/feliz-aniversario-vick/assets/fotos/capa.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💜</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Dancing+Script:wght@600;700&family=Great+Vibes&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Universo -->
+  <div class="nebula" aria-hidden="true">
+    <span class="neb n1"></span><span class="neb n2"></span><span class="neb n3"></span>
+    <span class="neb n4"></span><span class="neb n5"></span>
+  </div>
+  <canvas id="sky" aria-hidden="true"></canvas>
+
+  <!-- Tela de carregamento -->
+  <div id="loader">
+    <div class="loader-orbit"><span></span></div>
+    <p>preparando o universo…</p>
+  </div>
+
+  <!-- Dica do topo -->
+  <header class="hint" id="hint">
+    <p class="hint-small">um álbum lacrado, perdido no espaço, só pra</p>
+    <p class="hint-big">Vick</p>
+  </header>
+
+  <!-- Álbum -->
+  <main class="stage" id="stage">
+    <div class="float">
+      <div class="tilt" id="tilt">
+        <div class="book-wrap" id="bookWrap">
+          <div class="book" id="book" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Controles -->
+  <nav class="controls" id="controls" aria-label="Navegação do álbum">
+    <button class="ctl" id="prevBtn" aria-label="Página anterior">&#8592;</button>
+    <div class="stars-progress" id="progress" aria-hidden="true"></div>
+    <button class="ctl" id="nextBtn" aria-label="Próxima página">&#8594;</button>
+  </nav>
+  <button class="ctl music" id="musicBtn" aria-label="Ligar/desligar música" title="Música">♪</button>
+  <p class="turn-hint" id="turnHint">toque na página ou arraste para virar</p>
+
+  <!-- Finale -->
+  <div class="finale" id="finale">
+    <p class="finale-line">Que todos os seus desejos se realizem ✨</p>
+    <button class="finale-back" id="finaleBack">voltar ao álbum</button>
+  </div>
+
+  <canvas id="fx" aria-hidden="true"></canvas>
+
+  <script src="app.js"></script>
+</body>
+</html>
