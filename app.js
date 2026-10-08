@@ -651,6 +651,7 @@
     return {
       unlock, tone,
       get ctx() { return ctx; },
+      get master() { return master; },
       page() { if (ctx) noise(ctx.currentTime, 0.32, 1800, 0.18, 0.7); },
       crack() {
         if (!ctx) return; const t = ctx.currentTime;
@@ -665,28 +666,137 @@
     };
   })();
 
+  // Parabéns pra você em estilo 16-bit (chiptune), em loop contínuo.
+  // As notas são agendadas no relógio do áudio, um pouco à frente, para não haver pausa entre as voltas.
   const Music = (() => {
-    const F = { G2: 98, C3: 130.81, F3: 174.61, G3: 196, G4: 392, A4: 440, B4: 493.88, C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99 };
-    // [nota, tempos]
-    const MEL = [["G4", .75], ["G4", .25], ["A4", 1], ["G4", 1], ["C5", 1], ["B4", 2], ["G4", .75], ["G4", .25], ["A4", 1], ["G4", 1], ["D5", 1], ["C5", 2],
-      ["G4", .75], ["G4", .25], ["G5", 1], ["E5", 1], ["C5", 1], ["B4", 1], ["A4", 1.5], ["F5", .75], ["F5", .25], ["E5", 1], ["C5", 1], ["D5", 1], ["C5", 3]];
-    // [tempo do início, baixo]
-    const BASS = [[1, "C3"], [4, "G2"], [7, "G2"], [10, "C3"], [13, "C3"], [16, "F3"], [19.5, "C3"], [21.5, "G3"], [22.5, "C3"]];
-    const BEAT = 0.5;
-    let on = false, timer = null;
-    function playOnce() {
-      const ctx = Sound.ctx; if (!ctx || !on) return;
-      const t0 = ctx.currentTime + 0.1;
-      let t = 0;
-      for (const [n, d] of MEL) { Sound.tone(F[n], t0 + t * BEAT, Math.max(1.2, d * BEAT * 2.2), 0.16); t += d; }
-      for (const [b, n] of BASS) Sound.tone(F[n], t0 + b * BEAT, 2.2, 0.07, "triangle");
-      timer = setTimeout(playOnce, (t + 4) * BEAT * 1000);
+    const BEAT = 0.4;     // segundos por tempo
+    const LOOP = 24;      // 8 compassos de 3/4
+    const NOTE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    const hz = (n) => 440 * Math.pow(2, (NOTE[n[0]] + 12 * (+n.slice(1) + 1) - 69) / 12);
+
+    // [nota, duração em tempos]; o "G G" do fim de cada volta é a anacruse da próxima
+    const MEL = [["A4", 1], ["G4", 1], ["C5", 1], ["B4", 2], ["G4", .75], ["G4", .25],
+      ["A4", 1], ["G4", 1], ["D5", 1], ["C5", 2], ["G4", .75], ["G4", .25],
+      ["G5", 1], ["E5", 1], ["C5", 1], ["B4", 1], ["A4", 1], ["F5", .75], ["F5", .25],
+      ["E5", 1], ["C5", 1], ["D5", 1], ["C5", 2], ["G4", .75], ["G4", .25]];
+    const CHORD = { C: ["C", "E", "G"], G: ["G", "B", "D"], F: ["F", "A", "C"] };
+    const BARS = [["C"], ["G"], ["G"], ["C"], ["C"], ["F"], ["C", "C", "G"], ["C"]];
+
+    // monta a lista de eventos de uma volta
+    const EV = [];
+    let t = 0;
+    for (const [n, d] of MEL) { EV.push({ t, kind: "lead", f: hz(n), d }); t += d; }
+    BARS.forEach((bar, m) => {
+      for (let beat = 0; beat < 3; beat++) {
+        const ch = bar[beat] || bar[0];
+        const bt = m * 3 + beat;
+        const root = ch + (ch === "C" ? "3" : "2");
+        const bass = beat === 0 ? root : beat === 1 ? CHORD[ch][2] + "2" : root.replace(/\d/, (o) => +o + 1);
+        EV.push({ t: bt, kind: "bass", f: hz(bass), d: beat === 2 ? .5 : .9 });
+        if (beat === 2) EV.push({ t: bt + .5, kind: "bass", f: hz(root), d: .45 });
+        for (let s = 0; s < 4; s++) EV.push({ t: bt + s / 4, kind: "arp", f: hz(CHORD[ch][(beat * 4 + s) % 3] + "5"), d: .2 });
+        EV.push({ t: bt, kind: beat === 0 ? "kick" : "snare" });
+        EV.push({ t: bt + .5, kind: "hat" });
+      }
+    });
+    EV.sort((a, b) => a.t - b.t);
+
+    let on = false, timer = null, bus = null, pulse = null, noiseBuf = null;
+    let loopStart = 0, ei = 0;
+
+    function setup(ctx) {
+      if (!pulse) {
+        // onda de pulso 25% (timbre clássico de videogame)
+        const N = 48, real = new Float32Array(N), imag = new Float32Array(N);
+        for (let n = 1; n < N; n++) real[n] = (4 / (n * Math.PI)) * Math.sin(n * Math.PI * 0.25);
+        pulse = ctx.createPeriodicWave(real, imag);
+        noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      bus = ctx.createGain();
+      bus.gain.value = 0.9;
+      bus.connect(Sound.master);
     }
-    return {
-      start() { if (on) return; Sound.unlock(); on = true; playOnce(); },
-      stop() { on = false; clearTimeout(timer); },
-      toggle() { on ? this.stop() : this.start(); return on; },
-    };
+
+    function osc(ctx, t, dur, f, vol, wave, glideTo) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      if (wave === "pulse") o.setPeriodicWave(pulse); else o.type = wave;
+      o.frequency.setValueAtTime(f, t);
+      if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
+      g.gain.setValueAtTime(vol, t);
+      g.gain.setValueAtTime(vol, t + Math.max(0, dur - 0.03));
+      g.gain.linearRampToValueAtTime(0, t + dur);
+      o.connect(g); g.connect(bus);
+      o.start(t); o.stop(t + dur + 0.02);
+      return o;
+    }
+    function noise(ctx, t, dur, vol, hp) {
+      const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noiseBuf;
+      f.type = "highpass"; f.frequency.value = hp;
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      s.connect(f); f.connect(g); g.connect(bus);
+      s.start(t, Math.random() * 0.5); s.stop(t + dur);
+    }
+
+    function play(ctx, e, t) {
+      const len = e.d * BEAT;
+      switch (e.kind) {
+        case "lead": {
+          const o = osc(ctx, t, len * 0.92, e.f, 0.075, "pulse");
+          if (e.d >= 1) { // vibrato nas notas longas
+            const lfo = ctx.createOscillator(), lg = ctx.createGain();
+            lfo.frequency.value = 6; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(14, t + len * 0.6);
+            lfo.connect(lg); lg.connect(o.detune); lfo.start(t); lfo.stop(t + len);
+          }
+          osc(ctx, t + BEAT * 0.25, len * 0.8, e.f, 0.022, "pulse"); // eco atrasado
+          break;
+        }
+        case "bass": osc(ctx, t, len, e.f, 0.2, "triangle"); break;
+        case "arp": osc(ctx, t, BEAT * 0.18, e.f, 0.016, "square"); break;
+        case "kick": osc(ctx, t, 0.12, 160, 0.32, "sine", 40); break;
+        case "snare": noise(ctx, t, 0.09, 0.07, 1800); break;
+        case "hat": noise(ctx, t, 0.035, 0.035, 7000); break;
+      }
+    }
+
+    function schedule() {
+      const ctx = Sound.ctx; if (!ctx || !on) return;
+      const horizon = ctx.currentTime + 0.3;
+      while (loopStart + EV[ei].t * BEAT < horizon) {
+        play(ctx, EV[ei], loopStart + EV[ei].t * BEAT);
+        if (++ei >= EV.length) { ei = 0; loopStart += LOOP * BEAT; }
+      }
+    }
+
+    function start() {
+      if (on) return;
+      const ctx = Sound.unlock(); if (!ctx) return;
+      on = true;
+      setup(ctx);
+      // anacruse inicial "Pa-ra" antes da primeira volta
+      loopStart = ctx.currentTime + 0.15 + BEAT;
+      ei = 0;
+      play(ctx, { kind: "lead", f: hz("G4"), d: .75 }, loopStart - BEAT);
+      play(ctx, { kind: "lead", f: hz("G4"), d: .25 }, loopStart - BEAT * .25);
+      schedule();
+      timer = setInterval(schedule, 50);
+    }
+    function stop() {
+      on = false;
+      clearInterval(timer);
+      const ctx = Sound.ctx;
+      if (bus && ctx) {
+        const b = bus;
+        b.gain.setValueAtTime(b.gain.value, ctx.currentTime);
+        b.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.08);
+        setTimeout(() => b.disconnect(), 400);
+        bus = null;
+      }
+    }
+    return { start, stop, toggle() { on ? stop() : start(); return on; } };
   })();
 
   // ---------------------------------------------------------
