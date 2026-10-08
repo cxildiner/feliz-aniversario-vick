@@ -60,12 +60,12 @@
           </div>
         </div>
         <div class="ribbon top"></div><div class="ribbon bottom"></div>
-        <div class="seal" id="seal" role="button" tabindex="0" aria-label="Segure para romper o lacre">
+        <div class="seal" id="seal" role="button" tabindex="0" aria-label="Toque para romper o lacre">
           <div class="wax left"><span>V</span></div>
           <div class="wax right"><span>V</span></div>
           <svg viewBox="0 0 100 100"><circle id="sealRing" cx="50" cy="50" r="46" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>
         </div>
-        <div class="seal-tip">segure o lacre</div>
+        <div class="seal-tip">toque no lacre</div>
       </div>`,
     back: `
       <div class="face back cover-back">
@@ -293,15 +293,17 @@
     holdRaf = requestAnimationFrame(holdTick);
   }
   function holdEnd() {
-    if (unsealed) return;
-    cancelAnimationFrame(holdRaf);
-    seal.classList.remove("holding");
-    ring.style.transition = "stroke-dashoffset .35s ease";
-    ring.style.strokeDashoffset = "100";
-    setTimeout(() => (ring.style.transition = ""), 360);
+    if (unsealed || !seal.classList.contains("holding")) return;
+    breakSeal(); // um clique/toque simples já rompe
   }
-  seal.addEventListener("pointerdown", holdBegin);
-  ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => seal.addEventListener(ev, holdEnd));
+  // Com o álbum inclinado em 3D o navegador nem sempre acerta o alvo do clique,
+  // então qualquer clique dentro da área da capa conta como clique no lacre.
+  const onCover = (e) => {
+    const r = book.getBoundingClientRect();
+    return e.clientX >= r.left - 20 && e.clientX <= r.right + 40 && e.clientY >= r.top - 20 && e.clientY <= r.bottom + 20;
+  };
+  addEventListener("pointerdown", (e) => { if (!unsealed && onCover(e)) holdBegin(e); }, true);
+  addEventListener("pointerup", holdEnd, true);
   seal.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { Sound.unlock(); breakSeal(); } });
   seal.addEventListener("click", (e) => e.stopPropagation());
   seal.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -349,18 +351,14 @@
   // toque / arraste
   let down = null;
   stage.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button, .seal")) return;
-    down = { x: e.clientX, y: e.clientY, t: performance.now() };
+    if (!unsealed || e.target.closest("button, .seal")) return;
+    down ={ x: e.clientX, y: e.clientY, t: performance.now() };
   });
   stage.addEventListener("pointerup", (e) => {
     if (!down || e.target.closest("button, .seal")) { down = null; return; }
     const dx = e.clientX - down.x, dy = e.clientY - down.y;
     const isTap = Math.hypot(dx, dy) < 10;
     down = null;
-    if (!unsealed) {
-      if (isTap && e.target.closest(".cover")) nudgeSeal();
-      return;
-    }
     if (!isTap) {
       if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
       return;
@@ -375,10 +373,6 @@
     } else go(1);
   });
 
-  function nudgeSeal() {
-    seal.animate([{ transform: "translate(50%,-50%) rotate(0)" }, { transform: "translate(50%,-50%) rotate(-12deg) scale(1.08)" },
-      { transform: "translate(50%,-50%) rotate(10deg) scale(1.08)" }, { transform: "translate(50%,-50%) rotate(0)" }], { duration: 500 });
-  }
 
   // inclinação 3D do álbum fechado
   addEventListener("pointermove", (e) => {
